@@ -1,1 +1,1 @@
-[https://protohackers.com/](Server programming challenge.)
+[Server programming challenge.](https://protohackers.com/)
