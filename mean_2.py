@@ -5,7 +5,6 @@ import json
 import uuid
 import struct
 
-
 message_length = 9
 ServerSocket = socket.socket()
 host = ""
@@ -26,21 +25,20 @@ def send_to_client(sock, result):
 
 
 def threaded_client(cliento, clientid):
-    client_data = []
     bufferobj = bytearray()
     start_index = 0
     while True:
         data = cliento.recv(1024)
         if data:
             for b in data:
-                client_data.append(b)
                 bufferobj.append(b)
-                if len(client_data) % message_length == 0:
+                if len(bufferobj) % message_length == 0:
                     (instruction, timestamp, price) = struct.unpack(
-                        "!cii", bufferobj[start_index : start_index + 9]
+                        "!cii", bufferobj[start_index : start_index + message_length]
                     )
+                    instruction = instruction.decode('utf-8')
                     if clientid not in clients:
-                        if chr(client_data[start_index]) == "Q":
+                        if instruction == "Q":
                             res = 0
                             send_to_client(cliento, res)
                         else:
@@ -48,7 +46,7 @@ def threaded_client(cliento, clientid):
                             start_index += 9
 
                     else:
-                        if chr(client_data[start_index]) == "Q":
+                        if instruction == "Q":
                             list_is = clients[clientid]
                             filterd = sorted(list_is, key=lambda s: s[1][0])
                             eligible_prices = [
@@ -64,17 +62,17 @@ def threaded_client(cliento, clientid):
                             else:
                                 res = tot // len(eligible_prices)
 
-                            start_index += 9
+                            start_index += message_length
                             send_to_client(cliento, res)
                         else:
-                            if chr(client_data[start_index]) == "I":
+                            if instruction == "I":
                                 clients[clientid].append(
                                     [instruction, (timestamp, price)]
                                 )
-                                start_index += 9
+                                start_index += message_length
                             else:
                                 print("bad data")
-                                print(client_data[start_index])
+                                print(bufferobj[start_index])
         if not data:
             cliento.close()
             break
