@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -63,7 +62,6 @@ func handleConnection(conn net.Conn) {
 	for {
 		buf := make([]byte, 1024) // makes byte array filled with NUL bytes i.e. 0 cod epoint
 		n, err := conn.Read(buf)
-		buf = bytes.Trim(buf, "\x00") // replace all NUL bytes so that json.umarshal works
 		s := unix.ByteSliceToString(buf)
 
 		if err != nil {
