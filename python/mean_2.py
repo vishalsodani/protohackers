@@ -19,10 +19,8 @@ ServerSocket.listen(2000)
 
 clients = {}
 
-
 def send_to_client(sock, result):
     sock.send(struct.pack("!i", result))
-
 
 def threaded_client(cliento, clientid):
     bufferobj = bytearray()
@@ -44,7 +42,6 @@ def threaded_client(cliento, clientid):
                         else:
                             clients[clientid] = [[instruction, (timestamp, price)]]
                             start_index += 9
-
                     else:
                         if instruction == "Q":
                             list_is = clients[clientid]
@@ -55,13 +52,12 @@ def threaded_client(cliento, clientid):
                                 if i[1][0] >= timestamp and i[1][0] <= price
                             ]
                             tot = 0
-                            for pprice in eligible_prices:
-                                tot += pprice[1][1]
+                            for p in eligible_prices:
+                                tot += p[1][1]
                             if len(eligible_prices) == 0:
                                 res = 0
                             else:
                                 res = tot // len(eligible_prices)
-
                             start_index += message_length
                             send_to_client(cliento, res)
                         else:
@@ -76,7 +72,6 @@ def threaded_client(cliento, clientid):
         if not data:
             cliento.close()
             break
-
 
 while True:
     Client, address = ServerSocket.accept()
