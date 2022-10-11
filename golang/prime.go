@@ -59,9 +59,9 @@ func handleConnection(conn net.Conn) {
 	defer conn.Close()
 	var data string
 	for {
-		buf := make([]byte, 1024)
+		buf := make([]byte, 1024) // makes byte array filled with NUL bytes i.e. 0 cod epoint
 		n, err := conn.Read(buf)
-		buf = bytes.Trim(buf, "\x00")
+		buf = bytes.Trim(buf, "\x00") // replace all NUL bytes so that json.umarshal works
 
 		if err != nil {
 			fmt.Println(err)
