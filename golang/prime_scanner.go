@@ -1,13 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"math"
 	"net"
 	"strings"
 
-	"golang.org/x/sys/unix"
+	"golang.org/x/sys/windows"
 )
 
 func IsPrime(num float64) bool {
@@ -57,18 +58,26 @@ func main() {
 }
 
 func handleConnection(conn net.Conn) {
+	// s := bufio.NewScanner(c)
+	// if s.Scan() {
+	// 	data = s.Bytes() // data is next line, not including end lines, etc.
+	// }
+	// if s.Err() != nil {
+	// 	// handle error
+	// }
 	defer conn.Close()
 	var data string
 	for {
 		buf := make([]byte, 1024) // makes byte array filled with NUL bytes i.e. 0 cod epoint
 		n, err := conn.Read(buf)
-		s := unix.ByteSliceToString(buf)
+		buf = bytes.Trim(buf, "\x00") // replace all NUL bytes so that json.umarshal works
+		s := windows.ByteSliceToString(buf)
 
 		if err != nil {
 			fmt.Println(err)
 		}
 
-		data = data + s
+		data = data + string(buf)
 		if n == 0 {
 			break
 		}
