@@ -1,14 +1,12 @@
 package main
 
 import (
-	"bytes"
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"math"
 	"net"
 	"strings"
-
-	"golang.org/x/sys/windows"
 )
 
 func IsPrime(num float64) bool {
@@ -58,83 +56,57 @@ func main() {
 }
 
 func handleConnection(conn net.Conn) {
-	// s := bufio.NewScanner(c)
-	// if s.Scan() {
-	// 	data = s.Bytes() // data is next line, not including end lines, etc.
-	// }
-	// if s.Err() != nil {
-	// 	// handle error
-	// }
 	defer conn.Close()
-	var data string
-	for {
-		buf := make([]byte, 1024) // makes byte array filled with NUL bytes i.e. 0 cod epoint
-		n, err := conn.Read(buf)
-		buf = bytes.Trim(buf, "\x00") // replace all NUL bytes so that json.umarshal works
-		s := windows.ByteSliceToString(buf)
+	scanner := bufio.NewScanner(conn)
+	scanner.Split(bufio.ScanLines)
+	for scanner.Scan() {
+		data := scanner.Text()
+
+		type Request struct {
+			Method    string
+			Number    float64
+			BigNumber bool
+		}
+		var req *Request = &Request{}
+		data_w := data
+
+		if !strings.Contains(data_w, "method") ||
+			!strings.Contains(data_w, "number") {
+			send_malformed_response(conn)
+		}
+		err := json.Unmarshal([]byte(data_w), req)
 
 		if err != nil {
+			//fmt.Println("error json")
+			fmt.Println(data_w)
 			fmt.Println(err)
+			send_malformed_response(conn)
 		}
-
-		data = data + string(buf)
-		if n == 0 {
-			break
+		if req.Method != "isPrime" {
+			send_malformed_response(conn)
 		}
-
-		if strings.HasSuffix(data, "\n") {
-			data = strings.TrimSpace(data)
-			work := strings.Split(data, "\n")
-			fmt.Println(work)
-			for i := 0; i < len(work); i++ {
-				type Request struct {
-					Method    string
-					Number    float64
-					BigNumber bool
-				}
-				var req *Request = &Request{}
-				data_w := work[i]
-
-				if !strings.Contains(data_w, "method") ||
-					!strings.Contains(data_w, "number") {
-					send_malformed_response(conn)
-				}
-				err := json.Unmarshal([]byte(data_w), req)
-
-				if err != nil {
-					//fmt.Println("error json")
-					fmt.Println(data_w)
-					fmt.Println(err)
-					send_malformed_response(conn)
-				}
-				if req.Method != "isPrime" {
-					send_malformed_response(conn)
-				}
-				//fmt.Printf("%+v", req)
-				//fmt.Print("found end of line")
-				data = ""
-				if IsPrime(req.Number) && req.BigNumber == false {
-					var response string
-					response = `{"method":"isPrime","prime":true}`
-					resp := append([]byte(response), []byte("\n")...)
-					_, werr := conn.Write(resp)
-					if werr != nil {
-						fmt.Println(werr)
-					}
-				} else {
-					var response string
-					response = `{"method":"isPrime","prime":false}`
-					resp := append([]byte(response), []byte("\n")...)
-					_, werr := conn.Write(resp)
-					if werr != nil {
-						fmt.Println(werr)
-					}
-
-				}
-
+		//fmt.Printf("%+v", req)
+		//fmt.Print("found end of line")
+		data = ""
+		if IsPrime(req.Number) && req.BigNumber == false {
+			var response string
+			response = `{"method":"isPrime","prime":true}`
+			resp := append([]byte(response), []byte("\n")...)
+			_, werr := conn.Write(resp)
+			if werr != nil {
+				fmt.Println(werr)
+			}
+		} else {
+			var response string
+			response = `{"method":"isPrime","prime":false}`
+			resp := append([]byte(response), []byte("\n")...)
+			_, werr := conn.Write(resp)
+			if werr != nil {
+				fmt.Println(werr)
 			}
 
 		}
+
 	}
 
 }
