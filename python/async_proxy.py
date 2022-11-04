@@ -19,7 +19,7 @@ class ServerState:
             while (data := await reader.readline()):
                 tony = re.sub(r"(^|(?<= ))7[a-zA-Z0-9]{25,34}($|(?= ))", tony_address, data.decode("utf-8"))
                 stream_writer.write(bytes(tony, "utf-8"))
-                stream_writer.drain()
+                await stream_writer.drain()
             stream_writer.close()
 
         except Exception as e:
@@ -33,7 +33,7 @@ class ServerState:
             while (data := await reader.readline()):
                 tony = re.sub(r"(^|(?<= ))7[a-zA-Z0-9]{25,34}($|(?= ))", tony_address, data.decode("utf-8"))
                 writer.write(bytes(tony, "utf-8"))
-                writer.drain()
+                await writer.drain()
             writer.close()
 
         except Exception as e:
