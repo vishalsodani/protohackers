@@ -72,7 +72,7 @@ class ServerState:
                                     #ltr = queues[queue_to_return]
                                     working_q[res['id']] = client_id
                                     #res = {"status":"ok", "pri":ltr['pri'], "id":ltr["id"], "job": ltr["job"], "queue":queue_to_return}
-                                    #print(f'sending back {res}')
+                                    print(f'sending back {res}')
                                     writer.write(bytes(json.dumps(res) + "\n", "utf=8"))
                                     await writer.drain()
                                     #print("sent complete")
@@ -106,6 +106,19 @@ class ServerState:
                                 #     res = {"status":"ok"}
                                 #     writer.write(bytes(json.dumps(res) + "\n", "utf=8"))
                                 #     await writer.drain()
+                                bufferobj = bytearray()
+                            if j["request"] == "delete":
+                                job_id_is = j["id"]
+                                for q_u in queues:
+                                    working_on = queues[q_u]
+                                    for job in working_on.copy():
+                                        if job_id_is == job['id']:
+                                            working_on.remove(job)
+                                            res = {"status":"ok"}
+                                            writer.write(bytes(json.dumps(res) + "\n", "utf=8"))
+                                            await writer.drain()
+
+
                                 bufferobj = bytearray()
             
             writer.close()
