@@ -12,7 +12,7 @@ from queue import PriorityQueue
 
 queues = {}
 excluded = set()
-working_q = []
+working_q = {}
 
 
 def my_rand(start: int, end: int, exclude_values: Set[int] = None):
@@ -26,11 +26,11 @@ class ServerState:
     def __init__(self):
         self._writers = []
 
-    async def add_client(self, reader: StreamReader, writer: StreamWriter): #A
-        self._writers.append(writer)
-        asyncio.create_task(self._echo(reader, writer))
+    async def add_client(self, reader: StreamReader, writer: StreamWriter, client_id): #A
+        self._writers.append([writer, client_id])
+        asyncio.create_task(self._echo(reader, writer, client_id))
 
-    async def _echo(self, reader: StreamReader, writer: StreamWriter): #C
+    async def _echo(self, reader: StreamReader, writer: StreamWriter, client_id): #C
         try:
             bufferobj = bytearray()
             while (data := await reader.read(1)):
@@ -68,7 +68,7 @@ class ServerState:
                                 if res:
                                     found = True
                                     #ltr = queues[queue_to_return]
-                                    working_q.append(res['id'])
+                                    working_q[res['id']] = client_id
                                     #res = {"status":"ok", "pri":ltr['pri'], "id":ltr["id"], "job": ltr["job"], "queue":queue_to_return}
                                     #print(f'sending back {res}')
                                     writer.write(bytes(json.dumps(res) + "\n", "utf=8"))
@@ -90,6 +90,18 @@ class ServerState:
                                 writer.write(bytes(json.dumps(res) + "\n", "utf=8"))
                                 await writer.drain()
                                 bufferobj = bytearray()
+                            if j["request"] == "abort":
+                                job_id_is = j["id"]
+                                if client_id == working_q[job_id_is]:
+                                    res = {"status":"ok"}
+                                    writer.write(bytes(json.dumps(res) + "\n", "utf=8"))
+                                    await writer.drain()
+                                    del working_q[job_id_is]
+                                # else:
+                                #     res = {"status":"ok"}
+                                #     writer.write(bytes(json.dumps(res) + "\n", "utf=8"))
+                                #     await writer.drain()
+                                bufferobj = bytearray()
             #writer.close()
             #self._writers.remove(writer)
 
@@ -103,7 +115,8 @@ async def main():
     server_state = ServerState()
 
     async def client_connected(reader: StreamReader, writer: StreamWriter) -> None: #E
-        await server_state.add_client(reader, writer)
+        client_id = uuid.uuid4()
+        await server_state.add_client(reader, writer, client_id)
 
     server = await asyncio.start_server(client_connected, '127.0.0.1', 5003) #F
 
