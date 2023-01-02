@@ -13,6 +13,7 @@ from queue import PriorityQueue
 queues = {}
 excluded = set()
 working_q = {}
+waiting_clients = []
 
 
 def my_rand(start: int, end: int, exclude_values: Set[int] = None):
@@ -32,6 +33,7 @@ class ServerState:
 
     async def _echo(self, reader: StreamReader, writer: StreamWriter, client_id): #C
         try:
+            global working_q
             bufferobj = bytearray()
             while (data := await reader.read(1)):
                 for b in data:
@@ -75,9 +77,12 @@ class ServerState:
                                     await writer.drain()
                                     #print("sent complete")
                                 if found == False:
-                                    res = {"status":"no-job"}
-                                    writer.write(bytes(json.dumps(res) + "\n", "utf=8"))
-                                    await writer.drain()
+                                    if 'wait' in j and j['wait'] == True:
+                                        waiting_clients.append([client_id, j['queues'], writer])
+                                    else:
+                                        res = {"status":"no-job"}
+                                        writer.write(bytes(json.dumps(res) + "\n", "utf=8"))
+                                        await writer.drain()
                                 bufferobj = bytearray()
                             if j['request'] == "put":
                                 unique_id = my_rand(1, 500001, excluded)
@@ -102,14 +107,40 @@ class ServerState:
                                 #     writer.write(bytes(json.dumps(res) + "\n", "utf=8"))
                                 #     await writer.drain()
                                 bufferobj = bytearray()
-            #writer.close()
-            #self._writers.remove(writer)
+            
+            writer.close()
+            #working_q = {}
+            #global working_q
+            for k, v in working_q.copy().items():
+                if v == client_id:
+                    #print(f"delete for {client_id}")
+                    del working_q[k]
+                    if len(waiting_clients) > 0:
+                        waiting_list = waiting_clients[0][1]
+                        write_to_client = waiting_clients[0][2]
+                        
+                        for w in waiting_list:
+                            jobs = queues[w]
+                            for job in jobs:
+                                if job['id'] not in working_q:
+                                    res = {"status":"ok", "pri":job['pri'], "id":job["id"], "job": job["job"], "queue":w}
+                                    write_to_client.write(bytes(json.dumps(res) + "\n", "utf=8"))
+                                    await write_to_client.drain()
+                                    working_q[job['id']] = waiting_clients[0][0]
+  
 
+            
+            #self._writers.remove(writer)
+        except ConnectionError:
+            print("error")
+            
+            #working_q = {}
         except Exception as e:
             import traceback
             traceback.print_exc()
             logging.exception('Error reading from client.', exc_info=e)
-            self._writers.remove(writer)
+            #working_q = {}
+            #self._writers.remove(writer)
 
 async def main():
     server_state = ServerState()
