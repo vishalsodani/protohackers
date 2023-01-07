@@ -49,12 +49,8 @@ class ServerState:
                 for b in data:
                     bufferobj.append(b)
                     s = bufferobj.decode("utf-8")
-                # print("----SSSSSSSS")
-                # print(s)
-                # print("--end--SSSSSSSS")
                 if s.endswith("\n"):
                     bufferobj = bytearray()
-                    print(f"before splitting {s}")
                     count = s.count("\n")
                     # print(count)
                     requests = s.splitlines()
@@ -87,76 +83,41 @@ class ServerState:
                             found = False
                             priority = -1
                             res = None
-                            for q in q_list:
-                                try:
-                                    jobs = queues[q]
-                                    not_in_q = filter(
-                                        lambda x: x["id"] not in working_q, jobs
-                                    )
-                                    highest = heapq.nlargest(
+                            all_jobs = list(filter(lambda x:x['queue'] in q_list, queues))
+                            not_in_q = list(filter(lambda x: x["id"] not in working_q, all_jobs))
+                            highest = heapq.nlargest(
                                         1, not_in_q, lambda x: x["pri"]
                                     )
-                                    if (
-                                        len(highest) > 0
-                                        and highest[0]["pri"] > priority
-                                    ):
-                                        res = {
-                                            "status": "ok",
-                                            "pri": highest[0]["pri"],
-                                            "id": highest[0]["id"],
-                                            "job": highest[0]["job"],
-                                            "queue": q,
-                                        }
-                                        priority = highest[0]["pri"]
-                                except:
-                                    import traceback
-
-                                    traceback.print_exc()
-                            if res:
-                                found = True
-                                # ltr = queues[queue_to_return]
+                            if highest:
+                                res = {
+                                                "status": "ok",
+                                                "pri": highest[0]["pri"],
+                                                "id": highest[0]["id"],
+                                                "job": highest[0]["job"],
+                                                "queue": highest[0]["queue"],
+                                            }
                                 working_q[res["id"]] = client_id
-                                # print(f"job id in working q added {res['id']}")
-                                # res = {"status":"ok", "pri":ltr['pri'], "id":ltr["id"], "job": ltr["job"], "queue":queue_to_return}
-                                # print(f'sending back {res}')
                                 await send_response(writer, res)
-                                # print(f"response of get at {datetime.now()}")
-                                # print("sent complete")
-                            if found == False:
+                            else:
                                 if "wait" in j and j["wait"] == True:
                                     waiting_clients.append(
                                         [client_id, j["queues"], writer]
                                     )
                                 else:
-                                    # print(r)
                                     res = {"status": "no-job"}
                                     await send_response(writer, res)
                             bufferobj = bytearray()
                         if good and j["request"] == "put":
                             unique_id = my_rand(1, 500001, excluded)
                             excluded.add(unique_id)
-                            print(f"job id created {unique_id}")
-                            if j["queue"] not in queues:
-                                queues[j["queue"]] = [
-                                    {"job": j["job"], "pri": j["pri"], "id": unique_id}
-                                ]
-                            else:
-                                queues[j["queue"]].append(
-                                    {"job": j["job"], "pri": j["pri"], "id": unique_id}
-                                )
+                            queues.append({"job": j["job"], "pri": j["pri"], "id": unique_id, "queue":j["queue"]})
+
                             res = {"status": "ok", "id": unique_id}
                             await send_response(writer, res)
                             bufferobj = bytearray()
                         if good and j["request"] == "abort":
                             job_id_is = j["id"]
-                            # print(client_id)
                             if job_id_is in deleted_job or job_id_is not in working_q:
-                                # print('abort start')
-                                # print(working_q)
-                                # # print(job_id_is in deleted_job)
-                                # # print(job_id_is not in working_q)
-                                # # print(r)
-                                # print('abort end')
                                 res = {"status": "no-job"}
                                 await send_response(writer, res)
                                 print(f"response of abort at {datetime.now()}")
@@ -184,66 +145,49 @@ class ServerState:
                                 }
                                 await send_response(writer, res)
                                 print(f"response of abort at {datetime.now()}")
-
-                            # if job_id_is not in deleted_job and job_id_is in working_q:
-                            #     res = {"status":"ok"}
-                            #     await send_response(writer, res)
-                            # break
-                            # else:
-                            #     res = {"status":"ok"}
-                            #     writer.write(bytes(json.dumps(res) + "\n", "utf=8"))
-                            #     await writer.drain()
                             bufferobj = bytearray()
                         if good and j["request"] == "delete":
                             # print(f"delete request {j}")
                             job_id_is = j["id"]
-                            for q_u in queues:
-                                working_on = queues[q_u]
-                                for job in working_on.copy():
-                                    if job_id_is in deleted_job:
-                                        # print(r)
-                                        res = {"status": "no-job"}
-                                        await send_response(writer, res)
+                            job_found = list(filter(lambda x:x['id'] == job_id_is, queues))
+                            if job_id_is not in excluded:
+                                res = {"status": "no-job"}
+                                await send_response(writer, res)
+                                break
+                            if job_id_is in deleted_job:
+                                res = {"status": "no-job"}
+                                await send_response(writer, res)
+                                break
+                            if job_found:
+                                deleted_job.append(job_id_is)
+                                for ijob, q in enumerate(queues):
+                                    if q['id'] == job_id_is:
+                                        del queues[ijob]
                                         break
-                                    if job_id_is == job["id"]:
-                                        deleted_job.append(job["id"])
-                                        # print(f'deleted job q is {deleted_job} added {job["id"]}')
-                                        # print(f'working q {working_q} before delete {job_id_is}')
-                                        working_on.remove(job)
-                                        # print(f'working q {working_q} after delete {job_id_is}')
-                                        if job_id_is in working_q:
-                                            print(
-                                                f"job id deleted from working q {job_id_is}"
-                                            )
-                                            del working_q[job_id_is]
-                                        print(
-                                            f"job id in added to delete queue {job_id_is}"
-                                        )
-                                        res = {"status": "ok"}
-                                        await send_response(writer, res)
-                                        break
+                                if job_id_is in working_q:
+                                    print(
+                                        f"job id deleted from working q {job_id_is}"
+                                    )
+                                    del working_q[job_id_is]
+                                res = {"status": "ok"}
+                                await send_response(writer, res)
+                                break
 
                             bufferobj = bytearray()
 
-            # writer.close()
-            # working_q = {}
-            # global working_q
-            # print(client_id)
             for k, v in working_q.copy().items():
                 if v == client_id:
                     # print(f"delete for {client_id}")
                     del working_q[k]
                     if len(waiting_clients) > 0:
-                        # print(f'waiting clients are {len(waiting_clients)}')
-                        # waiting_list = waiting_clients[0][1]
-                        # write_to_client = waiting_clients[0][2]
-
                         for waits in waiting_clients.copy():
+                            print(f'waits value {waits}')
                             write_to_client = waits[2]
                             priority = -1
                             res = None
                             for w in waits[1]:
-                                jobs = queues[w]
+                                #jobs = queues[w]
+                                jobs = list(filter(lambda x:x['queue'] == w, queues))
                                 not_in_q = filter(
                                     lambda x: x["id"] not in working_q, jobs
                                 )
@@ -256,14 +200,8 @@ class ServerState:
                                         "pri": highest[0]["pri"],
                                         "id": highest[0]["id"],
                                         "job": highest[0]["job"],
-                                        "queue": q,
+                                        "queue": highest[0]["queue"],
                                     }
-                                    priority = highest[0]["pri"]
-                                    print(f"waiting queue passed job {q}")
-                                    # if job['id'] not in working_q:
-                                    #     if job['pri'] > priority:
-                                    #         res = {"status":"ok", "pri":job['pri'], "id":job["id"], "job": job["job"], "queue":q}
-                                    #         priority = job['pri']
                                 if res:
                                     write_to_client.write(
                                         bytes(json.dumps(res) + "\n", "utf=8")
