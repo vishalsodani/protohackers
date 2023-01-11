@@ -3,8 +3,8 @@ import os
 from _thread import *
 
 ServerSocket = socket.socket()
-host = ""
-port = 5004
+host = "127.0.0.1"
+port = 5003
 ThreadCount = 0
 try:
     ServerSocket.bind((host, port))

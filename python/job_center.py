@@ -3,9 +3,10 @@ import logging
 from asyncio import StreamReader, StreamWriter
 import struct
 import json
+from timeit import timeit
 import uuid
 from datetime import datetime
-from random import randint
+from random import random
 from random import choice
 from typing import Set
 from queue import PriorityQueue
@@ -13,14 +14,21 @@ import heapq
 
 queues = {}
 excluded = set()
+used = set()
 working_q = {}
 waiting_clients = []
 deleted_job = []
+job_id_counter = 0
+
+#def my_rand_client(start: int, end: int, exclude_values: Set[int] = None):
+    #if not exclude_values: # in this case, there are no values to exclude so there is no point in filtering out any
+        #return random(start, end)
+    #return choice(list(set(range(start, end)).difference(exclude_values)))
 
 def my_rand(start: int, end: int, exclude_values: Set[int] = None):
-    if not exclude_values: # in this case, there are no values to exclude so there is no point in filtering out any
-        return randint(start, end)
-    return choice(list(set(range(start, end)).difference(exclude_values)))
+    #if not exclude_values: # in this case, there are no values to exclude so there is no point in filtering out any
+    return random(start, end)
+    #return choice(list(set(range(start, end)).difference(exclude_values)))
 
 async def send_response(writer, res):
     writer.write(bytes(json.dumps(res) + "\n", "utf=8"))
@@ -38,17 +46,22 @@ class ServerState:
     async def _echo(self, reader: StreamReader, writer: StreamWriter, client_id): #C
         try:
             global working_q
-            bufferobj = bytearray()
-            while (data := await reader.readline()):
-                for b in data:
-                    bufferobj.append(b)
-                    s = bufferobj.decode('utf-8')
+            global job_id_counter
+            data = bytearray()
+            while True:
+                data = await reader.readline()
+                if not data:
+                    break
+                #a = datetime.now()
+                #for b in data:
+                    #bufferobj.append(b)
+                s = data.decode('utf-8')
                 # print("----SSSSSSSS")
                 # print(s)
                 # print("--end--SSSSSSSS")
                 if s.endswith("\n"):
                         bufferobj = bytearray()
-                        print(f"before splitting {s}")
+                        #print(f"before splitting {s}")
                         count = s.count("\n")
                         #print(count)
                         requests = s.splitlines()
@@ -71,6 +84,7 @@ class ServerState:
                                 await send_response(writer, res)
                                 break
                             if good and j['request'] == "get":
+                                
                                 q_list =  j['queues']
                                 found = False
                                 priority = -1
@@ -94,6 +108,15 @@ class ServerState:
                                     #res = {"status":"ok", "pri":ltr['pri'], "id":ltr["id"], "job": ltr["job"], "queue":queue_to_return}
                                     #print(f'sending back {res}')
                                     await send_response(writer, res)
+                                    # b = datetime.now()
+                                    # c = b - a
+                                    # ts = c.total_seconds()
+                                    # tds =  ts * 1000
+                                    # print("sec")
+                                    # print(ts)
+                                    # print("ms")
+                                    # print(tds)
+                                    break
                                     #print(f"response of get at {datetime.now()}")
                                     #print("sent complete")
                                 if found == False:
@@ -103,21 +126,33 @@ class ServerState:
                                         #print(r)
                                         res = {"status":"no-job"}
                                         await send_response(writer, res)
+                                
                                 bufferobj = bytearray()
                             if good and j['request'] == "put":
-                                unique_id = my_rand(1, 500001, excluded)
+                                unique_id = job_id_counter
+                                job_id_counter += 1
                                 excluded.add(unique_id)
-                                print(f"job id created {unique_id}")
+                                #print(f"job id created {unique_id}")
+                                
                                 if j['queue'] not in queues:
+                                    queues[j['queue']] = []
                                     queues[j['queue']] = [{"job":j['job'], "pri": j["pri"], "id":unique_id}]
+                                    #heappush_max(queues[j['queue']], {"job":j['job'], "pri": j["pri"], "id":unique_id})
                                 else:
                                     queues[j['queue']].append({"job":j['job'], "pri": j["pri"], "id":unique_id})
+                                    queues[j['queue']] = sorted(queues[j['queue']], key=lambda x:x['pri'], reverse=True)
                                 res = {"status":"ok","id":unique_id}
                                 await send_response(writer, res)
                                 bufferobj = bytearray()
                             if good and j["request"] == "abort":
                                 job_id_is = j["id"]
                                 #print(client_id)
+                                if job_id_is not in excluded:
+                                    res = {"status":"no-job"}
+                                    await send_response(writer, res)
+                                    #print(f"response of abort at {datetime.now()}")
+                                    break
+
                                 if job_id_is in deleted_job or job_id_is not in working_q:
                                     # print('abort start')
                                     # print(working_q)
@@ -127,19 +162,19 @@ class ServerState:
                                     # print('abort end')
                                     res = {"status":"no-job"}
                                     await send_response(writer, res)
-                                    print(f"response of abort at {datetime.now()}")
+                                    #print(f"response of abort at {datetime.now()}")
                                     break
                                     
                                 if job_id_is not in deleted_job and job_id_is in working_q and client_id == working_q[job_id_is] :
                                     del working_q[job_id_is]
                                     res = {"status":"ok"}
                                     await send_response(writer, res)
-                                    print(f"response of abort at {datetime.now()}")
+                                    #print(f"response of abort at {datetime.now()}")
                                 if job_id_is in working_q and client_id != working_q[job_id_is]:
-                                    print(f"job is in working q but for diff erent client {working_q[job_id_is]} so cannot abort {job_id_is}")
+                                    #print(f"job is in working q but for diff erent client {working_q[job_id_is]} so cannot abort {job_id_is}")
                                     res = {"status":"error","error":"Unrecognised request type."}
                                     await send_response(writer, res)
-                                    print(f"response of abort at {datetime.now()}")
+                                    #print(f"response of abort at {datetime.now()}")
                                 
                                     
                                 # if job_id_is not in deleted_job and job_id_is in working_q:
@@ -169,9 +204,9 @@ class ServerState:
                                             working_on.remove(job)
                                             #print(f'working q {working_q} after delete {job_id_is}')
                                             if job_id_is in working_q:
-                                                print(f"job id deleted from working q {job_id_is}")
+                                                #print(f"job id deleted from working q {job_id_is}")
                                                 del working_q[job_id_is]
-                                            print(f"job id in added to delete queue {job_id_is}")
+                                            #print(f"job id in added to delete queue {job_id_is}")
                                             res = {"status":"ok"}
                                             await send_response(writer, res)
                                             break
@@ -203,7 +238,7 @@ class ServerState:
                                 if len(highest) > 0 and highest[0]['pri'] > priority:
                                     res = {"status":"ok", "pri":highest[0]['pri'], "id":highest[0]["id"], "job": highest[0]["job"], "queue":q}
                                     priority = highest[0]['pri']
-                                    print(f"waiting queue passed job {q}")
+                                    #print(f"waiting queue passed job {q}")
                                     # if job['id'] not in working_q:
                                     #     if job['pri'] > priority:
                                     #         res = {"status":"ok", "pri":job['pri'], "id":job["id"], "job": job["job"], "queue":q}
@@ -235,6 +270,8 @@ async def main():
 
     async def client_connected(reader: StreamReader, writer: StreamWriter) -> None: #E
         client_id = uuid.uuid4()
+        #client_id = my_rand_client(1, 50000, used)
+        #used.add(client_id)
         await server_state.add_client(reader, writer, client_id)
 
     server = await asyncio.start_server(client_connected, '127.0.0.1', 5003) #F
