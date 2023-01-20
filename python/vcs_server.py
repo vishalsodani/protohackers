@@ -12,12 +12,15 @@ from typing import Set
 from queue import PriorityQueue
 import heapq
 import os
+import hashlib
 
 queues = {}
 excluded = set()
 working_q = {}
 waiting_clients = []
 deleted_job = []
+
+counter = {}
 
 
 def my_rand(start: int, end: int, exclude_values: Set[int] = None):
@@ -57,21 +60,34 @@ class ServerState:
                 remaining_c = data[5:].split(' ')
                 file_name = remaining_c[0]
                 file_length = int(remaining_c[1])
-                
-                print(f'{file_name}{file_length}')
+                data_is = ''
                 try:
-                    os.makedirs(os.path.dirname(file_name), exist_ok=True)
+                    os.makedirs(os.path.dirname(file_name), exist_ok=False)
                 except:
                     pass
                 with open(file_name, 'wb') as f:
                         while file_length > 0:
                             content = await reader.readline()
                             f.write(content)
+                            data_is += content.decode("utf-8")
                             file_length -= len(content)
+
+                if file_name not in counter:
+                    counter[file_name] = [1, file_length, hashlib.md5(data_is.encode("utf-8")).hexdigest()]
+                else:
+                    new_hash = hashlib.md5(data_is.encode("utf-8")).hexdigest()
+                    # if counter[file_name][1] != file_length:
+                    #     counter[file_name][0] += 1
+                    #     counter[file_name][1] = file_length
+                    if new_hash != counter[file_name][2]:
+                        counter[file_name][0] += 1
+                        counter[file_name][1] = file_length
+                        counter[file_name][2] = new_hash
+                print(f'{file_name}{file_length}')
                         
                         
-                        
-                writer.write(bytes("OK r1\n", "utf=8"))
+                print(f'{file_name}::{counter[file_name]}') 
+                writer.write(bytes(f"OK r{counter[file_name][0]}\n", "utf=8"))
                 await writer.drain()
                 writer.write(bytes("READY\n", "utf=8"))
                 await writer.drain()
