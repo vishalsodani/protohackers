@@ -47,11 +47,10 @@ class ServerState:
         asyncio.create_task(self._echo(reader, writer, client_id))
 
     async def _echo(self, reader: StreamReader, writer: StreamWriter, client_id):  # C
-        print("some")
         writer.write(bytes("READY\n", "utf=8"))
         await writer.drain()
         while data := await reader.readline():
-            print(data)
+            #print(counter)
             data = data.decode("utf-8").strip()
             if data == 'HELP':
                 writer.write(bytes("READY\n", "utf=8"))
@@ -60,7 +59,9 @@ class ServerState:
                 remaining_c = data[5:].split(' ')
                 file_name = remaining_c[0]
                 file_length = int(remaining_c[1])
+                ofl = file_length
                 data_is = ''
+                revision = 1
                 try:
                     os.makedirs(os.path.dirname(file_name), exist_ok=False)
                 except:
@@ -73,29 +74,65 @@ class ServerState:
                             file_length -= len(content)
 
                 if file_name not in counter:
-                    counter[file_name] = [1, file_length, hashlib.md5(data_is.encode("utf-8")).hexdigest()]
+                    counter[file_name] = {'r1':[ofl, hashlib.md5(data_is.encode("utf-8")).hexdigest(), data_is]}
+                    writer.write(bytes(f"OK r{revision}\n", "utf=8"))
+                    await writer.drain()
+                    writer.write(bytes("READY\n", "utf=8"))
+                    await writer.drain()
                 else:
                     new_hash = hashlib.md5(data_is.encode("utf-8")).hexdigest()
                     # if counter[file_name][1] != file_length:
                     #     counter[file_name][0] += 1
                     #     counter[file_name][1] = file_length
-                    if new_hash != counter[file_name][2]:
-                        counter[file_name][0] += 1
-                        counter[file_name][1] = file_length
-                        counter[file_name][2] = new_hash
-                print(f'{file_name}{file_length}')
+                    last_key = len(counter[file_name].keys())
+                    
+                    if new_hash != counter[file_name][f'r{last_key}'][1]:
+                        counter[file_name][f'r{last_key+1}'] = [ofl, new_hash, data_is]
+                        revision = last_key + 1
+                        #print(file_name)
+                        #print(revision)
+                        writer.write(bytes(f"OK r{revision}\n", "utf=8"))
+                        await writer.drain()
+                        writer.write(bytes("READY\n", "utf=8"))
+                        await writer.drain()
+                    else:
+                        #counter[file_name][f'r{last_key+1}'] = [ofl, new_hash, data_is]
+                        print(file_name)
+                        print(revision)
+                        writer.write(bytes(f"OK r{last_key}\n", "utf=8"))
+                        await writer.drain()
+                        writer.write(bytes("READY\n", "utf=8"))
+                        await writer.drain()
+
+                    #else:
+                        #revision = last_key + 1
+                        
+                        # counter[file_name][1] = ofl
+                        # counter[file_name][2] = new_hash
+                        # counter[file_name][3] = data_is
+                        # print(counter[file_name])
+                        # if not os.path.exists(f"r{counter[file_name][0]}/" + file_name):
+                        #     os.makedirs(f"r{counter[file_name][0]}/" + file_name)
+                        #     with open(f"r{counter[file_name][0]}/" + file_name, 'wb') as f2:
+                        #         f2.write(data_is)
+
+                #print(f'{file_name}{file_length}')
                         
                         
-                print(f'{file_name}::{counter[file_name]}') 
-                writer.write(bytes(f"OK r{counter[file_name][0]}\n", "utf=8"))
-                await writer.drain()
-                writer.write(bytes("READY\n", "utf=8"))
-                await writer.drain()
+                #print(f'{file_name}::{counter[file_name]}') 
+                
                 #break
             if data[0:3] == 'GET':
-                writer.write(bytes("OK 14\n", "utf=8"))
+                get_obj = data[4:].split(' ')
+                
+                if len(get_obj) > 1:
+                    revision = get_obj[1][1:]
+                else:
+                    revision = len(counter[get_obj[0][1:]].keys())
+                which_file = counter[get_obj[0][1:]][f'r{revision}']
+                writer.write(bytes(f"OK {which_file[0]}\n", "utf=8"))
                 await writer.drain()
-                writer.write(bytes("Hello, world!\n", "utf=8"))
+                writer.write(bytes(f"{which_file[2]}", "utf=8"))
                 await writer.drain()
                 writer.write(bytes("READY\n", "utf=8"))
                 await writer.drain()
