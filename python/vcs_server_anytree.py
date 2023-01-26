@@ -1,5 +1,6 @@
 from anytree import Node, RenderTree, AsciiStyle, search
 import asyncio
+import re
 from asyncore import read
 import logging
 from asyncio import StreamReader, StreamWriter
@@ -52,6 +53,7 @@ class ServerState:
         await writer.drain()
         while data := await reader.readline():
             #print(counter)
+            #print(data)
             data = data.decode("utf-8").strip()
             print(data)
             if data == 'HELP':
@@ -60,16 +62,37 @@ class ServerState:
             if data[0:3] == 'PUT':
                 remaining_c = data[5:].split(' ')
                 file_name = remaining_c[0]
+                #breakpoint()
+                special_characters = "!\"#$%&\'()*+,:;<=>?@[\\]^_`{|}~"
+                if any(c in special_characters for c in file_name) or file_name.endswith('/'):
+                    print(f"rejected {file_name}")
+                    writer.write(bytes(f"Err: illelgaal filename\n", "utf=8"))
+                    await writer.drain()
+                    break
                 file_length = int(remaining_c[1])
                 ofl = file_length
                 data_is = ''
                 revision = 1
                 total = 1
+                dir_name = None
                 n_dir = search.find(counter, filter_=lambda node: node.name in ("/"))
                 if '/' in file_name:
                     dir_name, file_name = file_name.split('/')
                     total = 2
                 
+                # print(file_name)
+                # print([c in special_characters for c in file_name])
+                # if any(c in special_characters for c in file_name):
+                #     print(f"rejected {file_name}")
+                #     writer.write(bytes(f"Err: illelgaal filename\n", "utf=8"))
+                #     await writer.drain()
+                #     continue
+                # if dir_name and any(c in special_characters for c in dir_name):
+                #     print(f"rejected {file_name}")
+                #     writer.write(bytes(f"Err: illelgaal filename\n", "utf=8"))
+                #     await writer.drain()
+                #     continue
+                print(f"accepted{file_name}")
                 while file_length > 0:
                     content = await reader.readline()
                     data_is += content.decode("utf-8")
@@ -113,6 +136,7 @@ class ServerState:
             if data[0:3].upper() == 'GET':
                 get_obj = data[5:].split(' ')
                 get_obj_f = get_obj[0].split('/')[-1:]
+                print(get_obj_f)
                 n = search.find(counter, filter_=lambda node: node.name in (get_obj_f))
                 if len(get_obj) > 1:
                     revision = get_obj[1][1:]
